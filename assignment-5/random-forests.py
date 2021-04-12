@@ -21,13 +21,15 @@ FOLDS = 5
 kf = KFold(FOLDS)
 
 accuracies = np.zeros((FOLDS, 8))
-for d in range(40, 5):
+for d in range(1, 41, 5):
+    print("woop")
     for i, (train, test) in enumerate(kf.split(X, y)):
         X_train, X_test = X[train], X[test]
         y_train, y_test = y[train], y[test]
-        clf = RandomForestClassifier(max_depth=30, min_samples_split = 2)
+        clf = RandomForestClassifier(max_depth=d, min_samples_split = 2)
         clf.fit(X_train, y_train)
         y_pred = clf.predict(X_test)
         accuracies[i, int(d/40)] = accuracy_score(y_test, y_pred)
+        print(accuracy_score(y_test, y_pred), d, i)
 
 print(np.mean(accuracies, axis=0))
