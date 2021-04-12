@@ -7,15 +7,16 @@
 # 
 # ## b
 
-# In[7]:
+# In[5]:
 
 
 import numpy as np
 from scipy.special import comb
 import matplotlib.pyplot as plt
+import poisson_binomial as pb
 
 
-# In[96]:
+# In[6]:
 
 
 def maj_vote(c, p):
@@ -44,7 +45,7 @@ print(maj_vote(c, p))
 
 # ## c
 
-# In[98]:
+# In[7]:
 
 
 def plot(n, p):
@@ -67,7 +68,7 @@ plt.show()
 
 # ## d, e
 
-# In[99]:
+# In[33]:
 
 
 print(maj_vote(1, 0.85))
@@ -78,9 +79,9 @@ print(maj_vote(25, 0.6))
 
 
 # ## Exercise 3
-# ## b
+# ## a
 
-# In[120]:
+# In[34]:
 
 
 without = 0
@@ -95,6 +96,9 @@ if c % 2 == 0:
 d += 0.5
 d = int(d)
 
+new_p = (p * c + strong_p) / 11
+print(maj_vote(11, new_p))
+
 for i in range(d - 1, c + 1):
     if i >= d:
         without += comb(c, i) * p ** i * (1 - p) ** (c - i) * (1 - strong_p)
@@ -102,6 +106,76 @@ for i in range(d - 1, c + 1):
     
 result = without + with_
 print(result)
+
+
+# ## b
+
+# In[37]:
+
+
+def weighted_vote(c, ps, w):
+    p, strong_p = ps
+    without = 0
+    with_ = 0
+    
+    if w == 0:
+        return maj_vote(c  - 1, p)
+    
+    d = c / 2
+    if c % 2 == 0:
+        d += 0.5
+    d += 0.5
+    d = int(d)
+    
+    new_p = 1 - (1 - strong_p) ** w
+    
+    for i in range(d - 1, c + 1):
+        if i >= d:
+            without += comb(c, i) * p ** i * (1 - p) ** (c - i) * (1 - new_p)
+        with_ += comb(c, i) * p ** i * (1 - p) ** (c - i) * new_p
+
+    return without + with_    
+
+
+c = 11
+p = (0.6, 0.75)
+n = 50
+results = np.empty(n)
+for i, w in enumerate(range(0, n)):
+    results[i] = weighted_vote(c, p, w / 10)
+plt.plot(np.arange(n) / 10, results)
+plt.xlabel("Weight")
+plt.ylabel("Success chance")
+plt.title("Weighted majority vote")
+plt.show()
+
+
+# In[69]:
+
+
+def AdaBoost(p):
+    N = 11
+    w = np.full(N, 1/N)
+    M = 3
+    np.random.seed(37)
+    
+    for m in range(M):
+        correct = np.zeros(N)
+        for i in range(N):
+            if np.random.rand() < p[i]:
+                correct[i] = 1
+        
+        error = np.sum(w * correct) / np.sum(w)
+        print("Error: {}".format(error))
+        alpha_m = np.log((1 - error) / error)
+        print("Alpha: {}".format(alpha_m))
+        w *= np.exp(alpha_m * correct)
+        print("w: {}".format(w))
+    return w
+        
+        
+p = np.append(np.repeat(0.6, 10), 0.75)
+print(AdaBoost(p))
 
 
 # In[106]:
