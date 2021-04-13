@@ -18,6 +18,8 @@ data = pd.read_csv("~/natural-computing/covtype.data", header = None)
 X = data.iloc[:,:10].values
 y = data.iloc[:,54].values
 
+plt.hist(y)
+
 FOLDS = 3
 cv = KFold(FOLDS)
 
@@ -35,7 +37,7 @@ cv = KFold(FOLDS)
 
 #print(np.mean(accuracies, axis=0))
 
-
+"""
 clf_ = RandomForestClassifier()
 depths = range(1, 31, 5)
 estimators = [10, 25, 50, 75, 100]
@@ -55,3 +57,4 @@ plt.legend()
 plt.xlabel("# estimators")
 plt.ylabel("Mean score")
 plt.show()
+"""
