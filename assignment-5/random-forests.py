@@ -12,24 +12,46 @@ import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, GridSearchCV
 
 data = pd.read_csv("~/natural-computing/covtype.data", header = None)
 X = data.iloc[:,:10].values
 y = data.iloc[:,54].values
-FOLDS = 5
-kf = KFold(FOLDS)
 
-accuracies = np.zeros((FOLDS, 8))
-for d in range(1, 41, 5):
-    print("woop")
-    for i, (train, test) in enumerate(kf.split(X, y)):
-        X_train, X_test = X[train], X[test]
-        y_train, y_test = y[train], y[test]
-        clf = RandomForestClassifier(max_depth=d, min_samples_split = 2)
-        clf.fit(X_train, y_train)
-        y_pred = clf.predict(X_test)
-        accuracies[i, int(d/40)] = accuracy_score(y_test, y_pred)
-        print(accuracy_score(y_test, y_pred), d, i)
+FOLDS = 3
+cv = KFold(FOLDS)
 
-print(np.mean(accuracies, axis=0))
+#accuracies = np.zeros((FOLDS, 8))
+#for d in range(1, 31, 5):
+#    print("woop")
+#    for i, (train, test) in enumerate(kf.split(X, y)):
+#        X_train, X_test = X[train], X[test]
+#        y_train, y_test = y[train], y[test]
+#        clf = RandomForestClassifier(max_depth=d, min_samples_split = 2)
+#        clf.fit(X_train, y_train)
+#        y_pred = clf.predict(X_test)
+#        accuracies[i, int(d/5)] = accuracy_score(y_test, y_pred)
+#        print(accuracy_score(y_test, y_pred), d, i)
+
+#print(np.mean(accuracies, axis=0))
+
+
+clf_ = RandomForestClassifier()
+depths = range(1, 31, 5)
+estimators = [10, 25, 50, 75, 100]
+#estimators = [10, 100]
+params = {"max_depth": depths, "n_estimators": estimators}
+print("Starting...")
+clf = GridSearchCV(clf_, params)
+clf.fit(X, y)
+print("Done!")
+scores = clf.cv_results_["mean_test_score"]
+print(scores)
+scores = np.array(scores).reshape(len(depths), len(estimators))
+
+for ind, i in enumerate(depths):
+    plt.plot(estimators, scores[ind], "-o", label=f"depth: {i}")
+plt.legend()
+plt.xlabel("# estimators")
+plt.ylabel("Mean score")
+plt.show()
