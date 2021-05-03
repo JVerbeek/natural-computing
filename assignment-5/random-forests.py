@@ -15,7 +15,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.model_selection import KFold, GridSearchCV
 
 data = pd.read_csv("~/natural-computing/covtype.data", header = None)
-X = data.iloc[:,:10].values
+X = data.iloc[:,:30].values
 y = data.iloc[:,54].values
 
 plt.hist(y)
@@ -39,12 +39,12 @@ cv = KFold(FOLDS)
 
 """
 clf_ = RandomForestClassifier()
-depths = range(1, 31, 5)
-estimators = [10, 25, 50, 75, 100]
+depths = range(1, 31, 3)
+estimators = [20, 30, 40, 50, 60, 70, 80, 90, 100]
 #estimators = [10, 100]
 params = {"max_depth": depths, "n_estimators": estimators}
 print("Starting...")
-clf = GridSearchCV(clf_, params)
+clf = GridSearchCV(clf_, params, verbose=3, n_jobs=-1)
 clf.fit(X, y)
 print("Done!")
 scores = clf.cv_results_["mean_test_score"]
@@ -54,6 +54,7 @@ scores = np.array(scores).reshape(len(depths), len(estimators))
 for ind, i in enumerate(depths):
     plt.plot(estimators, scores[ind], "-o", label=f"depth: {i}")
 plt.legend()
+plt.title("Mean accuracy vs. # estimators per depth")
 plt.xlabel("# estimators")
 plt.ylabel("Mean score")
 plt.show()
