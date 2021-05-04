@@ -169,10 +169,10 @@ class LSTM(nn.Module):
         
         
         cell_list.append(CustomLSTMCell( self.input_size, self.hidden_size))#the first
-        #one has a different number of input channels
+        # one has a different number of input channels
         
         for idcell in range(1,self.num_layers):
-            cell_list.append(LSTMCell(self.hidden_size, self.hidden_size))
+            cell_list.append(CustomLSTMCell(self.hidden_size, self.hidden_size))
         self.cell_list=nn.ModuleList(cell_list)      
     
     def forward(self, current_input, hidden_state):
@@ -182,17 +182,17 @@ class LSTM(nn.Module):
             input is the tensor of shape seq_len,Batch,Chans,H,W
         """
         #current_input=input
-        next_hidden=[]#hidden states(h and c)
-        seq_len=current_input.size(0)
+        next_hidden = []  # hidden states(h and c)
+        seq_len = current_input.size(0)
 
         
         for idlayer in range(self.num_layers):#loop for every layer
 
-            hidden_c=hidden_state[idlayer]#hidden and c are images with several channels
+            hidden_c = hidden_state[idlayer] # hidden and c are images with several channels
             all_output = []
             output_inner = []            
             for t in range(seq_len):#loop for every step
-                hidden_c=self.cell_list[idlayer](current_input,hidden_c)
+                hy, cy = self.cell_list[idlayer](current_input,hidden_c)
 
                 output_inner.append(hidden_c)
 
@@ -230,7 +230,8 @@ def prune_connections(model, paths, output_type="m1"):
     elif output_type == "m2":  # Output type M2
         path = torch.from_numpy(paths.m2)
         prune.custom_from_mask(model.x2h, "weight", path)
-    
+        prune.custom_from_mask(model.h2h, "weight", path)
+        
     else:
         raise ValueError("output_type kwarg must be m1 or m2")
     
@@ -241,27 +242,51 @@ if __name__ == "__main__":
     cell = CustomLSTMCell(1, 1)
     pheromones = Pheromones(N_INPUTS)
     cur_best = 0
-    n_epochs = 2
-    model = CustomLSTMCell(N_INPUTS, N_INPUTS)
+    n_epochs = 10
+    pop_size = 5
+    models = []
+    base_model = CustomLSTMCell(N_INPUTS, N_INPUTS)
+    
+    # Generate population
+    for idx in range(pop_size):
+        model = base_model
+        paths = generate_paths(pheromones)    
+        pruned_model = prune_connections(model, paths)
+        # Append (model, fitness) tuple
+        models.append((pruned_model, 0))
+
+    # Some vars for testing (CHAOS)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-    input = torch.randn(4, 4, 16)
-    labels = torch.randn(4, 16)
-    h0 = torch.randn(4, 4, 16)
-    c0 = torch.randn(4, 4, 16)
     
-    for epoch in range(n_epochs):
-        paths = generate_paths(pheromones)
-        
-        pruned_model = prune_connections(model, paths)
-        
-        # forward + backward + optimize
-        outputs, _ = pruned_model(input, (h0, c0))
-        print(len(outputs))
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
-        
+    # Testing data
+    train_input = torch.rand(4, 4, 16)
+    test_input = torch.rand(4, 4, 16)
+    labels = torch.empty(4, 16, dtype=torch.long).random_(4)
+    test_labels = torch.empty(4, 16, dtype=torch.long).random_(4)
+    
+    
+    hn = torch.rand(4, 4, 16)
+    cn = torch.rand(4, 4, 16)
+
+    for (model, fitness) in models:
+        # Train phase for single network
+        for epoch in range(n_epochs):
+
+            # forward + backward + optimize
+            hn, cn = model(train_input, (hn, cn))
+            loss = criterion(hn, labels)
+            loss.backward(retain_graph=True)
+            optimizer.step()
+            
+        # Compute fitness on a test set
+        ht, ct = model(test_input, (hn, cn))
+        fitness = criterion(ht, labels)
+    
+    population = models
+    
+    for (model, fitness) in population:
+        # Pheromone update round
         if fitness > cur_best:
             cur_best = fitness
             update_pheromones(pheromones, paths, 0)
@@ -269,4 +294,9 @@ if __name__ == "__main__":
             update_pheromones(pheromones, paths, 1)
         if epoch % DEG_FREQ == 0:
             update_pheromones(pheromones, paths, 2)
+    
+    # Then probably next ACO iteration:
+        # Generate 5 more population, evaluate
+        # Add to existing population, potentially trim
+    
    
