@@ -68,6 +68,8 @@ class Pheromones():
 
 class Paths():  # Maybe make paths_m1 and paths_m2
     def __init__(self, n_inputs, n_outputs, ants=256):
+        self.n_inputs = n_inputs
+        self.n_outputs = n_outputs
         self.input = np.zeros(n_inputs, dtype=bool)
         self.m1 = np.zeros((n_inputs*4, n_inputs), dtype=bool)
         self.m2 = np.zeros((n_outputs*4, n_inputs), dtype=bool)
@@ -77,36 +79,34 @@ class Paths():  # Maybe make paths_m1 and paths_m2
         self.pheromones = Pheromones(n_inputs, n_outputs)
         
     
-    # Logic mistake here? Ant doesn't walk a path at all if the pheromone level
-    # is too low. Don't we want to have the ant find a new path when the if 
-    # statement fails?
-    def ants_m1(self):
-        for ant in range(self.ants):
-            # Generate random path for each ant
-            row = np.random.randint(len(self.m1))
-            col = np.random.randint(len(self.m1[row]))
-            pheromone = self.pheromones.m1[row, col]
-            decision = np.random.rand()
-            if decision < pheromone:
-                self.m1[row, col] = True
-
-    def ants_m2(self):
-        for ant in range(self.ants):
-            # Generate random path for each ant
-            row = np.random.randint(len(self.m2))
-            col = np.random.randint(len(self.m2[row]))
-            pheromone= self.pheromones.m2[row, col]
-            decision = np.random.rand()
-            if decision < pheromone:
-                self.m2[row, col] = True
-    
+    def general_ants(self, kind="m1"):
+        """General ant function"""
+        if kind == "m1":
+            paths = np.zeros((self.n_inputs*4, self.n_inputs), dtype=bool)
+            pheromones = self.pheromones.m1
+        elif kind == "m2":
+            paths =  np.zeros((self.n_outputs*4, self.n_inputs), dtype=bool)
+            pheromones = self.pheromones.m2
+        else:
+            paths = np.zeros((self.n_outputs*4, self.n_outputs), dtype=bool)
+            pheromones = self.pheromones.m2_red
+        
+        flatpath = paths.flatten()
+        flat_pheromones = pheromones.flatten()
+        flat_pheromones = flat_pheromones / len(flat_pheromones)
+        chosen_paths = np.random.choice(len(flatpath), self.ants, p=flat_pheromones)
+        
+        for i in chosen_paths:
+            flatpath[i] = True
+        
+        return torch.from_numpy(flatpath.reshape(paths.shape))
+        
     def get_m1(self) -> torch.Tensor:
         """Get mask without data reduction (n_in == n_out).
         Returns:
             Tensor of size (n_inputs*4, n_outputs)
         """
-        randoms = np.random.rand(self.m1.shape[0], self.m1.shape[1])
-        return torch.from_numpy(randoms < self.pheromones.m1)
+        return self.general_ants("m1")
     
     def get_m2(self, reduce=False) -> torch.Tensor:
         """Get mask with data reduction.
@@ -121,12 +121,9 @@ class Paths():  # Maybe make paths_m1 and paths_m2
         """
         # If reduction to one output, adapt dimensions
         if reduce:
-            randoms = np.random.rand(self.m2_red.shape[0], self.m2_red.shape[1])
-            return torch.from_numpy(randoms < self.pheromones.m2_red)
-
+            return self.general_ants("m2r")
         # By default return "regular" mask
-        randoms = np.random.rand(self.m2.shape[0], self.m2.shape[1])  
-        return torch.from_numpy(randoms < self.pheromones.m2)
+        return self.general_ants("m2")
         
     
 def prune_cell_m1(layer, paths) -> None:
@@ -136,6 +133,7 @@ def prune_cell_m1(layer, paths) -> None:
     contents = [content for (name, content) in layer.named_parameters() 
                 if "weight" in name]
     # Do we also want to prune the biases?
+    # idk
     
     # Pruning step
     for name, content in zip(names, contents):
@@ -165,7 +163,6 @@ def prune_layer(model, n_inputs, n_outputs):
     prune_cell_m2(model.rnn, paths)
 
 paths = Paths(16, 4)
-paths.ants_m1()
 m1_cell = nn.LSTMCell(16, 16)
 m2_cell = nn.LSTMCell(16, 4)
 prune_cell_m1(m1_cell, paths)
