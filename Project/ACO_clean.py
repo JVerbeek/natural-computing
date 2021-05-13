@@ -10,6 +10,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.utils.prune as prune
+import pandas as pd
+import os
 from mdrnn import MDRNN
 
 
@@ -158,22 +160,60 @@ def prune_cell_m2(layer, paths) -> None:
         else:  # ih layer has 4*n_out, n_in dims
             prune.custom_from_mask(layer, name=name, mask=paths.get_m2())
 
+
 def prune_layer(model, n_inputs, n_outputs):
     # Hardcoded for now, no clue how to do it properly
     paths = Paths(n_inputs, n_outputs)
     prune_cell_m1(model.rnn, paths)
     prune_cell_m2(model.rnn, paths)
 
-paths = Paths(16, 4)
-paths.ants_m1()
-m1_cell = nn.LSTMCell(16, 16)
-m2_cell = nn.LSTMCell(16, 4)
-prune_cell_m1(m1_cell, paths)
-prune_cell_m2(m2_cell, paths)
+    
+def load_data():
+    '''
+    Function to load data, currently a toy dataset.
+    '''
+    data_path = 'data'
+    flights = ['C172', 'C182', 'PA28', 'PA44', 'SR20']
+    data = None
+    for flight in flights:
+        df = pd.read_csv(
+            os.path.join(data_path, flight, 'log_110812_095915_KCKN.csv'), 
+            comment='#',
+            skipinitialspace=True)
+        # Used features:
+        df = df[['AltB', 'BaroA', 'OAT']]
+        
+        # Concatenate data, disregard flight
+        if data is None:
+            data = torch.Tensor(df.values)
+            
+        data = torch.cat((data, torch.Tensor(df.values)))
+    print("Number of features: {}, number of entries: {}".format(data.shape[1],
+                                                                 data.shape[0]))
+load_data()
 
-def train(model):
-    pass
 
+def train(model, input_seq, target_seq):
+    # Define hyperparameters
+    n_epochs = 100
+    lr=0.01
+    
+    # Define Loss, Optimizer
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    
+    for epoch in range(1, n_epochs + 1):
+        optimizer.zero_grad()
+        mus, sigmas, logpi, rs, ds = model(input_seq)
+        loss = model.loss()
+        loss.backward()
+        optimizer.step()
+        
+        if epoch%10 == 0:
+            print('Epoch: {}/{}.............'.format(epoch, n_epochs), end=' ')
+            print("Loss: {:.4f}".format(loss.item()))
+    
+    
 def test(model):
     pass
 
@@ -203,17 +243,18 @@ def ACO(aco_iterations):
         paths = None
         
         for _ in n_models:
-            model = MDRNN(n_inputs, n_outputs, n_hiddens, n_gaussians)
+            input_seq, target_seq, input_size, batch_size = load_data()
+            model = MDRNN(input_size, input_size, n_hiddens, n_gaussians)
             
             # Prune the model
             # Loop layers
             prune_layer(model, n_inputs, n_outputs)
             
             # Training loop 
-            train(model)
+            train(model, input_seq, target_seq)
             
             # Update fitness
-            fitness = test(model)
+            test(model)
             
             # Add model to population
             population.append(model)
