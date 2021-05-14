@@ -170,7 +170,10 @@ def prune_layer(model, n_inputs, n_outputs):
     
 def load_data():
     '''
-    Function to load data, currently a toy dataset.
+    Function to load the NGAFID dataset.
+    
+    Only takes three features currently and disregards unique flights
+    TODO: split data into training/validation/testing data
     '''
     data_path = 'data'
     flights = ['C172', 'C182', 'PA28', 'PA44', 'SR20']
@@ -190,8 +193,7 @@ def load_data():
         data = torch.cat((data, torch.Tensor(df.values)))
     print("Number of features: {}, number of entries: {}".format(data.shape[1],
                                                                  data.shape[0]))
-load_data()
-
+    return data
 
 def train(model, input_seq, target_seq):
     # Define hyperparameters
@@ -243,15 +245,15 @@ def ACO(aco_iterations):
         paths = None
         
         for _ in n_models:
-            input_seq, target_seq, input_size, batch_size = load_data()
-            model = MDRNN(input_size, input_size, n_hiddens, n_gaussians)
+            data = load_data()
+            model = MDRNN(n_inputs, n_outputs, n_hiddens, n_gaussians)
             
             # Prune the model
             # Loop layers
             prune_layer(model, n_inputs, n_outputs)
             
             # Training loop 
-            train(model, input_seq, target_seq)
+            train(model, data)
             
             # Update fitness
             test(model)
