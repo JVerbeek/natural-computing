@@ -25,10 +25,12 @@ class MDRNN(_MDRNNBase):
     """ MDRNN model for multi steps forward """
     def __init__(self, n_input, n_output, n_hidden, n_gaussian):
         super().__init__(n_input, n_output, n_hidden, n_gaussian)
-        self.rnn = nn.LSTM(n_input + n_output, n_hidden)
+        self.rnn = nn.LSTM(n_input, n_hidden)  # was: n_input + n_output
 
-    def forward(self, n_output, n_input):
+    def forward(self, inputs):
         """ MULTI STEPS forward.
+        TODO: Fix this (mainly shapes)
+        
         :args n_output: (SEQ_LEN, BSIZE, ASIZE) torch tensor
         :args n_input: (SEQ_LEN, BSIZE, LSIZE) torch tensor
         :returns: mu_nlat, sig_nlat, pi_nlat, rs, ds, parameters of the GMM
@@ -40,10 +42,10 @@ class MDRNN(_MDRNNBase):
             - rs: (SEQ_LEN, BSIZE) torch tensor
             - ds: (SEQ_LEN, BSIZE) torch tensor
         """
-        seq_len, bs = n_output.size(0), n_output.size(1)
-
-        ins = torch.cat([n_output, n_input], dim=-1)
-        outs, _ = self.rnn(ins)
+        
+        seq_len, bs = inputs.size(0), inputs.size(1)
+        
+        outs, _ = self.rnn(inputs)
         gmm_outs = self.gmm_linear(outs)
 
         stride = self.n_gaussian * self.n_input
@@ -64,3 +66,6 @@ class MDRNN(_MDRNNBase):
         ds = gmm_outs[:, :, -1]
 
         return mus, sigmas, logpi, rs, ds
+    
+    def loss():
+        return NotImplementedError()
