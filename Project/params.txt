@@ -1,0 +1,67 @@
+Lcl Date - Local date
+Lcl Time - Local time
+UTCOfst - UTC Offset
+AtvWpt - ATV(?) Waypoint
+Latitude
+Longitude
+AltB - Altitude B(?)
+BaroA - Barometer A(?)
+AltMSL - Altitude Mean Sea Level
+OAT - Outside AIr Temperature
+IAS - indicated air speed
+GndSped - Ground Speed
+VSpd - Vertical Speed
+Pitch - pitch axis
+Roll - roll axis
+LatAc - ?
+NormAc - ?
+HDG - heading
+TRK - track
+volt1
+volt2
+amp1
+amp2
+FQtyL - Fuel Quantity Left
+FQtyR - Fuel Quantity Right
+E1 = Engine 1?
+E1 FFlow - fuel flow
+E1 OilT - Oil Temperature?
+E1 OilP - Oil Pressure?
+E1 RPM - rotations per minute
+E1 CHT1 - Cylinder Head Temperature
+E1 CHT2
+E1 CHT3
+E1 CHT4
+E1 EGT1 - Exhaust gas temperature
+E1 EGT2
+E1 EGT3
+E1 EGT4
+AltGPS - altitude gps?
+TAS - True Airspeed
+HSIS - Horizontal Situation Indicator Source(?)
+CRS - Course
+NAV1 - Navigation Receiver 1 (in MHz)
+NAV2
+COM1 - Communication Receiver (in MHz)
+COM2
+HCDI - Horizontal Course Deviation Indicator
+VCDI - Vertical Course Deviation Indicator (0 everywhere)
+WndSpd - Wind Speed
+WndDr - Wind Direction
+WptDst - Waypoint Distance
+WptBrg - Waypoint Bearing
+MagVar - Magnetic Variation
+AfcsOn - Automatic FLight Control System On (0 everywhere)
+RollM - 0 everywhere
+PitchM - 0 everywhere
+RollC - 0 everywhere
+PichC - 0 everywhere
+VspdG - Vertical Speed Gain (?)
+GPSfix - 3DDiff
+H = Horizontal, V = vertical?
+fd = flight director?
+HAL - 
+VAL - 
+HPLwas - 
+HPLfd - 
+VPLwas - 
