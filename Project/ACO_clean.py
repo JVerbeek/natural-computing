@@ -97,7 +97,7 @@ class Paths():
         
         flatpath = paths.flatten()
         flat_pheromones = pheromones.flatten()
-        flat_pheromones = flat_pheromones / len(flat_pheromones)
+        flat_pheromones = flat_pheromones / sum(flat_pheromones)
         chosen_paths = np.random.choice(len(flatpath), self.ants, 
                                         p=flat_pheromones)
         
@@ -112,7 +112,7 @@ class Paths():
             Tensor of size (n_inputs*4, n_outputs)
         """
         return self.general_ants("m1")
-    
+
     def get_m2(self, reduce=False) -> torch.Tensor:
         """Get mask with data reduction.
         Kwargs:
@@ -234,7 +234,7 @@ test samples: {}".format(training_data.shape[1], training_data.shape[0],
 
 def train(model, training_data):
     # Define hyperparameters
-    n_epochs = 100
+    n_epochs = 5
     lr = 0.01
     batch_size = 16
     
@@ -245,6 +245,7 @@ def train(model, training_data):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     
     for epoch in range(1, n_epochs + 1):
+        print(f"Epoch {epoch}")
         for batch in train_loader:
             # Unsqueeze to make dimensions work in the model; it assumes the 
             # data has some sequence length, 
@@ -255,7 +256,7 @@ def train(model, training_data):
             data, target = torch.split(batch, batch.shape[-1] - 1, dim=-1)
             optimizer.zero_grad()
             mus, sigmas, logpi, rs, ds = model(data)
-            loss = model.loss(ds, logpi, mus, sigmas)
+            loss = model.loss(target, logpi, mus, sigmas)
             loss.backward()
             optimizer.step()
         
@@ -265,8 +266,10 @@ def train(model, training_data):
     
     
 def test(model, test_data):
-    pass
-
+    data, target = torch.split(batch, batch.shape[-1] - 1, dim=-1)
+    mus, sigmas, logpi, rs, ds = model(data)
+    fitness = model.loss(target, logpi, mus, sigmas)
+    return fitness
 
 def ACO(aco_iterations):
     """

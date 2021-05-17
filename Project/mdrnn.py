@@ -29,7 +29,8 @@ class MDRNN(_MDRNNBase):
     def __init__(self, n_input, n_output, n_hidden, n_gaussian):
         super().__init__(n_input, n_output, n_hidden, n_gaussian)
         self.rnn = nn.LSTM(n_input, n_hidden)  # was: n_input + n_output
-
+        self.fitness = -1
+        
     def forward(self, inputs):
         """ MULTI STEPS forward.
         TODO: Fix this (mainly shapes)
@@ -78,10 +79,10 @@ class MDRNN(_MDRNNBase):
             loss
 
         """
+        y_pred = y_pred.unsqueeze(2)
         mixture = torch.distributions.normal.Normal(mu, sigma)
         p_log = mixture.log_prob(y_pred)
         log_sum = torch.logsumexp(p_log, dim=3)
-        
         return -log_sum.mean()
     
     
