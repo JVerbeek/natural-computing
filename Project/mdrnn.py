@@ -42,8 +42,8 @@ class MDRNN(_MDRNNBase):
             - mu_nlat: (SEQ_LEN, BSIZE, N_GAUSS, LSIZE) torch tensor
             - sigma_nlat: (SEQ_LEN, BSIZE, N_GAUSS, LSIZE) torch tensor
             - logpi_nlat: (SEQ_LEN, BSIZE, N_GAUSS) torch tensor
-            - rs: (SEQ_LEN, BSIZE) torch tensor
-            - ds: (SEQ_LEN, BSIZE) torch tensor
+            - rs: (SEQ_LEN, BSIZE) torch tensor - UNUSED
+            - ds: (SEQ_LEN, BSIZE) torch tensor - UNUSED
         """
         
         seq_len, bs = inputs.size(0), inputs.size(1)
@@ -64,11 +64,7 @@ class MDRNN(_MDRNNBase):
         pi = pi.view(seq_len, bs, self.n_gaussian)
         logpi = f.log_softmax(pi, dim=-1)
 
-        rs = gmm_outs[:, :, -2]
-
-        ds = gmm_outs[:, :, -1]
-
-        return mus, sigmas, logpi, rs, ds
+        return mus, sigmas, logpi
     
     def loss(self, y_pred, pi, mu, sigma):
         """

@@ -163,7 +163,6 @@ def prune_cell_m2(layer, paths) -> None:
             prune.custom_from_mask(layer, name=name, 
                                    mask=paths.get_m2(reduce=True))
         else:  # ih layer has 4*n_out, n_in dims
-            print(content.shape, paths.get_m2().shape)
             prune.custom_from_mask(layer, name=name, mask=paths.get_m2())
 
 
@@ -232,11 +231,10 @@ test samples: {}".format(training_data.shape[1], training_data.shape[0],
     return training_data, test_data
 
 
-def train(model, training_data):
+def train(model, training_data, batch_size=16):
     # Define hyperparameters
     n_epochs = 100
     lr = 0.01
-    batch_size = 16
     
     train_loader = DataLoader(training_data, batch_size=batch_size, 
                               shuffle=True)
@@ -254,8 +252,8 @@ def train(model, training_data):
             # Extract target
             data, target = torch.split(batch, batch.shape[-1] - 1, dim=-1)
             optimizer.zero_grad()
-            mus, sigmas, logpi, rs, ds = model(data)
-            loss = model.loss(ds, logpi, mus, sigmas)
+            mus, sigmas, logpi = model(data)
+            loss = model.loss(target, logpi, mus, sigmas)
             loss.backward()
             optimizer.step()
         
@@ -264,8 +262,19 @@ def train(model, training_data):
             print("Loss: {:.4f}".format(loss.item()))
     
     
-def test(model, test_data):
-    pass
+def test(model, test_data, batch_size=16):
+    
+    test_loader = DataLoader(test_data, batch_size=batch_size)
+    loss = 0
+    
+    for batch in test_loader:
+        
+        batch = batch.unsqueeze(0)
+        data, target = torch.split(batch, batch.shape[-1] - 1, dim=-1)
+        
+        with torch.no_grad():
+            mus, sigmas, logpi = model(data)
+            loss += model.loss(target, logpi, mus, sigmas)
 
 
 def ACO(aco_iterations):
@@ -278,9 +287,10 @@ def ACO(aco_iterations):
     n_hiddens = 2  # should equal n_inputs
     
     # Hyper parameters
-    n_gaussians = 5
+    n_gaussians = 1  # is this dependent on other factors?
     n_models = 1  # 1 for now, actually 10
     deg_freq = 5
+    batch_size = 16
     
     # Initialize population
     population = []
@@ -301,10 +311,10 @@ def ACO(aco_iterations):
             prune_layer(model, n_inputs, n_hiddens)
             
             # Training loop 
-            train(model, training_data)
+            train(model, training_data, batch_size)
             
             # Update fitness
-            test(model, test_data)
+            test(model, test_data, batch_size)
             
             # Add model to population
             population.append(model)
