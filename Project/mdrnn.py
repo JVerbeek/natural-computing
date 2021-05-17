@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as f
 from torch.distributions.normal import Normal
 
+
 class _MDRNNBase(nn.Module):
     def __init__(self, n_input, n_output, n_hidden, n_gaussian):
         super().__init__()
@@ -21,8 +22,10 @@ class _MDRNNBase(nn.Module):
     def forward(self, *inputs):
         pass
 
+
 class MDRNN(_MDRNNBase):
     """ MDRNN model for multi steps forward """
+    
     def __init__(self, n_input, n_output, n_hidden, n_gaussian):
         super().__init__(n_input, n_output, n_hidden, n_gaussian)
         self.rnn = nn.LSTM(n_input, n_hidden)  # was: n_input + n_output
@@ -67,5 +70,18 @@ class MDRNN(_MDRNNBase):
 
         return mus, sigmas, logpi, rs, ds
     
-    def loss():
-        return NotImplementedError()
+    def loss(self, y_pred, pi, mu, sigma):
+        """
+        Negative log likelihood under GMM
+        
+        Returns:
+            loss
+
+        """
+        mixture = torch.distributions.normal.Normal(mu, sigma)
+        p_log = mixture.log_prob(y_pred)
+        log_sum = torch.logsumexp(p_log, dim=3)
+        
+        return -log_sum.mean()
+    
+    

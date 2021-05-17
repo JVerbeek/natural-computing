@@ -29,14 +29,14 @@ class Pheromones():
     m2 : pheromone levels for the second layer
     m2_red : DESCRIPTION.
     """
+    
     def __init__(self, n_inputs, n_outputs, max_pheromone=10):
         self.input = np.ones(n_inputs)
-        self.m1 = np.ones((n_inputs*4, n_inputs))
-        self.m2 = np.ones((n_outputs*4, n_inputs))
-        self.m2_red = np.ones((n_outputs*4, n_outputs))
-        self.max_pheromone=max_pheromone
-        
-        
+        self.m1 = np.ones((n_inputs * 4, n_inputs))
+        self.m2 = np.ones((n_outputs * 4, n_inputs))
+        self.m2_red = np.ones((n_outputs * 4, n_outputs))
+        self.max_pheromone = max_pheromone
+         
     def update(self, paths, action):
         """
         Update pheromones along specific connections.
@@ -52,7 +52,8 @@ class Pheromones():
         for i in range(1, len(paths.input)):
             if paths.input[i] == 1:
                 if action == 0:  # reward
-                    self.input[i] = min(self.input[i] * 1.15, self.max_pheromone)
+                    self.input[i] = min(self.input[i] * 1.15, 
+                                        self.max_pheromone)
                 elif action == 1:  # penalize
                     self.input[i] *= 0.85
                 elif action == 2:  # degrade
@@ -62,7 +63,8 @@ class Pheromones():
             for j in range(1, len(paths.m1[i])):
                 if paths.m1[i][j] == 1:
                     if action == 0:  # reward
-                        self.m1[i][j] = min(self.m1[i][j] * 1.15, self.max_pheromone)
+                        self.m1[i][j] = min(self.m1[i][j] * 1.15, 
+                                            self.max_pheromone)
                     elif action == 1:  # penalize
                         self.m1[i][j] *= 0.85
                     elif action == 2:  # degrade
@@ -74,30 +76,30 @@ class Paths():
         self.n_inputs = n_inputs
         self.n_outputs = n_outputs
         self.input = np.zeros(n_inputs, dtype=bool)
-        self.m1 = np.zeros((n_inputs*4, n_inputs), dtype=bool)
-        self.m2 = np.zeros((n_outputs*4, n_inputs), dtype=bool)
-        self.m2_red = np.zeros((n_outputs*4, n_outputs), dtype=bool)
+        self.m1 = np.zeros((n_inputs * 4, n_inputs), dtype=bool)
+        self.m2 = np.zeros((n_outputs * 4, n_inputs), dtype=bool)
+        self.m2_red = np.zeros((n_outputs * 4, n_outputs), dtype=bool)
         self.ants = ants
         # Create pheromones object
         self.pheromones = Pheromones(n_inputs, n_outputs)
         
-    
     def general_ants(self, kind="m1"):
         """General ant function"""
         if kind == "m1":
-            paths = np.zeros((self.n_inputs*4, self.n_inputs), dtype=bool)
+            paths = np.zeros((self.n_inputs * 4, self.n_inputs), dtype=bool)
             pheromones = self.pheromones.m1
         elif kind == "m2":
-            paths =  np.zeros((self.n_outputs*4, self.n_inputs), dtype=bool)
+            paths = np.zeros((self.n_outputs * 4, self.n_inputs), dtype=bool)
             pheromones = self.pheromones.m2
         else:
-            paths = np.zeros((self.n_outputs*4, self.n_outputs), dtype=bool)
+            paths = np.zeros((self.n_outputs * 4, self.n_outputs), dtype=bool)
             pheromones = self.pheromones.m2_red
         
         flatpath = paths.flatten()
         flat_pheromones = pheromones.flatten()
         flat_pheromones = flat_pheromones / len(flat_pheromones)
-        chosen_paths = np.random.choice(len(flatpath), self.ants, p=flat_pheromones)
+        chosen_paths = np.random.choice(len(flatpath), self.ants, 
+                                        p=flat_pheromones)
         
         for i in chosen_paths:
             flatpath[i] = True
@@ -135,7 +137,8 @@ def prune_cell_m1(layer, paths) -> None:
     Shape of contents entry is 4*hiddens, n_input + n_output
     """
     # Copy names, contents
-    names = [name for (name, content) in layer.named_parameters()]
+    names = [name for (name, content) in layer.named_parameters() 
+             if "weight" in name]
     contents = [content for (name, content) in layer.named_parameters() 
                 if "weight" in name]
     
@@ -150,17 +153,17 @@ def prune_cell_m2(layer, paths) -> None:
     """Prune M2 cell. Since M2 cells only have one output, the paths 
     are adapted accordingly."""
     # Copy names, contents
-    names = [name for (name, content) in layer.named_parameters()]
+    names = [name for (name, content) in layer.named_parameters() 
+             if "weight" in name]
     contents = [content for (name, content) in layer.named_parameters() 
                 if "weight" in name]
-    
     # Pruning step
     for name, content in zip(names, contents):
-        print(paths.get_m2().size())
         if "hh" in name:  # hh layer has 4*n_out, n_out dims
-            prune.custom_from_mask(layer, name=name, \
+            prune.custom_from_mask(layer, name=name, 
                                    mask=paths.get_m2(reduce=True))
         else:  # ih layer has 4*n_out, n_in dims
+            print(content.shape, paths.get_m2().shape)
             prune.custom_from_mask(layer, name=name, mask=paths.get_m2())
 
 
@@ -176,15 +179,10 @@ def prune_layer(model, n_inputs, n_outputs):
     
     # Hardcoded for now, no clue how to do it properly
     paths = Paths(n_inputs, n_outputs)
-   
-    # Run ants
-    paths.ants_m1()
-    paths.ants_m2()
     
     # Prune the cells
     prune_cell_m1(model.rnn, paths)
-    #prune_cell_m2(model.rnn, paths)  # 2nd prune attempt goes wrong, I wonder 
-    # if we even need it with a single layer
+    prune_cell_m2(model.rnn, paths)
 
     
 def load_data():
@@ -228,26 +226,20 @@ def load_data():
     
     # Print general information
     print("Number of features: {}, number of training samples: {}, number of \
-test samples: {}".format(training_data.shape[1], training_data.shape[0], test_data.shape[0]))
+test samples: {}".format(training_data.shape[1], training_data.shape[0], 
+                         test_data.shape[0]))
     
     return training_data, test_data
 
-<<<<<<< HEAD
-paths = Paths(16, 4)
-m1_cell = nn.LSTMCell(16, 16)
-m2_cell = nn.LSTMCell(16, 4)
-prune_cell_m1(m1_cell, paths)
-prune_cell_m2(m2_cell, paths)
-=======
->>>>>>> 1dd19689e0c7eaf02ef7f4499ec8942f23cd9aa6
 
 def train(model, training_data):
     # Define hyperparameters
     n_epochs = 100
-    lr=0.01
+    lr = 0.01
     batch_size = 16
     
-    train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(training_data, batch_size=batch_size, 
+                              shuffle=True)
     
     # Define Loss, Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -255,18 +247,19 @@ def train(model, training_data):
     for epoch in range(1, n_epochs + 1):
         for batch in train_loader:
             # Unsqueeze to make dimensions work in the model; it assumes the 
-            # data has some sequence length, but in our case that's just 1 I think
+            # data has some sequence length, 
+            # but in our case that's just 1 I think
             batch = batch.unsqueeze(0)
 
             # Extract target
-            data, target = torch.split(batch, batch.shape[-1]-1, dim=-1)
+            data, target = torch.split(batch, batch.shape[-1] - 1, dim=-1)
             optimizer.zero_grad()
             mus, sigmas, logpi, rs, ds = model(data)
-            loss = model.loss()
+            loss = model.loss(ds, logpi, mus, sigmas)
             loss.backward()
             optimizer.step()
         
-        if epoch%10 == 0:
+        if epoch % 10 == 0:
             print('Epoch: {}/{}.............'.format(epoch, n_epochs), end=' ')
             print("Loss: {:.4f}".format(loss.item()))
     
@@ -305,7 +298,7 @@ def ACO(aco_iterations):
             
             # Prune the model
             # Loop layers
-            prune_layer(model, n_inputs, n_outputs)
+            prune_layer(model, n_inputs, n_hiddens)
             
             # Training loop 
             train(model, training_data)
@@ -324,9 +317,7 @@ def ACO(aco_iterations):
             else:  # Punishment 
                 pheromones.update(paths, 1)
             if iteration % deg_freq == 0:  # Decay step
-                 pheromones.update(paths, 2)
-ACO(1)        
-            
-            
-            
-            
+                pheromones.update(paths, 2)
+                 
+                 
+ACO(1)
