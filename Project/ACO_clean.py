@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader
 import pandas as pd
 import os
 from mdrnn import MDRNN
+import tqdm as tqdm
 
 
 class Pheromones():
@@ -72,7 +73,7 @@ class Pheromones():
 
 
 class Paths():
-    def __init__(self, n_inputs, n_outputs, ants=256):
+    def __init__(self, n_inputs, n_outputs, pheromones, ants=256):
         self.n_inputs = n_inputs
         self.n_outputs = n_outputs
         self.input = np.zeros(n_inputs, dtype=bool)
@@ -81,7 +82,7 @@ class Paths():
         self.m2_red = np.zeros((n_outputs * 4, n_outputs), dtype=bool)
         self.ants = ants
         # Create pheromones object
-        self.pheromones = Pheromones(n_inputs, n_outputs)
+        self.pheromones = pheromones
         
     def general_ants(self, kind="m1"):
         """General ant function"""
@@ -163,11 +164,10 @@ def prune_cell_m2(layer, paths) -> None:
             prune.custom_from_mask(layer, name=name, 
                                    mask=paths.get_m2(reduce=True))
         else:  # ih layer has 4*n_out, n_in dims
-            print(content.shape, paths.get_m2().shape)
             prune.custom_from_mask(layer, name=name, mask=paths.get_m2())
 
 
-def prune_layer(model, n_inputs, n_outputs):
+def prune_layer(model, paths, n_inputs, n_outputs):
     """
     Prunes the rnn layer of a model
     
@@ -176,10 +176,7 @@ def prune_layer(model, n_inputs, n_outputs):
     n_inputs: number of inputs
     n_outputs: number of outputs
     """
-    
-    # Hardcoded for now, no clue how to do it properly
-    paths = Paths(n_inputs, n_outputs)
-    
+
     # Prune the cells
     prune_cell_m1(model.rnn, paths)
     prune_cell_m2(model.rnn, paths)
@@ -232,11 +229,10 @@ test samples: {}".format(training_data.shape[1], training_data.shape[0],
     return training_data, test_data
 
 
-def train(model, training_data):
+def train(model, training_data, batch_size=16):
     # Define hyperparameters
-    n_epochs = 5
+    n_epochs = 50
     lr = 0.01
-    batch_size = 16
     
     train_loader = DataLoader(training_data, batch_size=batch_size, 
                               shuffle=True)
@@ -245,7 +241,6 @@ def train(model, training_data):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     
     for epoch in range(1, n_epochs + 1):
-        print(f"Epoch {epoch}")
         for batch in train_loader:
             # Unsqueeze to make dimensions work in the model; it assumes the 
             # data has some sequence length, 
@@ -255,7 +250,8 @@ def train(model, training_data):
             # Extract target
             data, target = torch.split(batch, batch.shape[-1] - 1, dim=-1)
             optimizer.zero_grad()
-            mus, sigmas, logpi, rs, ds = model(data)
+
+            mus, sigmas, logpi = model(data)
             loss = model.loss(target, logpi, mus, sigmas)
             loss.backward()
             optimizer.step()
@@ -265,13 +261,22 @@ def train(model, training_data):
             print("Loss: {:.4f}".format(loss.item()))
     
     
-def test(model, test_data):
-    data, target = torch.split(batch, batch.shape[-1] - 1, dim=-1)
-    mus, sigmas, logpi, rs, ds = model(data)
-    fitness = model.loss(target, logpi, mus, sigmas)
-    return fitness
+def test(model, test_data, batch_size=16):
+    
+    test_loader = DataLoader(test_data, batch_size=batch_size)
+    loss = 0
+    
+    for batch in test_loader:
+        
+        batch = batch.unsqueeze(0)
+        data, target = torch.split(batch, batch.shape[-1] - 1, dim=-1)
+        
+        with torch.no_grad():
+            mus, sigmas, logpi = model(data)
+            loss += model.loss(target, logpi, mus, sigmas)
+    model.fitness = loss 
 
-def ACO(aco_iterations):
+def ACO(aco_iterations, n_in, n_out, n_hidden, pheromones):
     """
     Run the ACO algorithm for aco_iterations iterations.
     """
@@ -281,46 +286,54 @@ def ACO(aco_iterations):
     n_hiddens = 2  # should equal n_inputs
     
     # Hyper parameters
-    n_gaussians = 5
-    n_models = 1  # 1 for now, actually 10
+    n_gaussians = 1  # is this dependent on other factors?
+    n_models = 5  # 1 for now, actually 10
     deg_freq = 5
+    batch_size = 16
     
     # Initialize population
     population = []
-    cur_best = -1
-    # Generate pheromones
-    pheromones = None 
-    
-    for iteration in range(aco_iterations):
+    cur_best = 100000
+    training_data, test_data = load_data()
+    for iteration in tqdm.tqdm(range(aco_iterations)):
         # Generate paths for the models
-        paths = None
-        
+
         for _ in range(n_models):
-            training_data, test_data = load_data()
             model = MDRNN(n_inputs, n_outputs, n_hiddens, n_gaussians)
-            
+            paths = Paths(n_inputs, n_hiddens, pheromones)
             # Prune the model
             # Loop layers
-            prune_layer(model, n_inputs, n_hiddens)
+            prune_layer(model, paths, n_inputs, n_hiddens)
             
             # Training loop 
-            train(model, training_data)
+            train(model, training_data, batch_size)
             
             # Update fitness
-            test(model, test_data)
+            test(model, test_data, batch_size)
             
             # Add model to population
-            population.append(model)
+            population.append((model, paths))
         
         # Update pheromones
-        for model in population:
-            if model.fitness > cur_best:  # Reward
+        for model, paths in population:
+            if model.fitness < cur_best:  # Reward
+                print("Great")
+                torch.save(model.state_dict(), 'model_weights.pth')
                 cur_best = model.fitness
                 pheromones.update(paths, 0)
             else:  # Punishment 
                 pheromones.update(paths, 1)
             if iteration % deg_freq == 0:  # Decay step
                 pheromones.update(paths, 2)
-                 
-                 
-ACO(1)
+    bests = []
+    for model, paths in population:
+        if model.fitness == cur_best:
+            print(model.fitness, model)
+
+n_inputs = 2
+n_outputs = 1
+n_hiddens = 2  # should equal n_inputs                
+    
+pheromones = Pheromones(n_inputs, n_hiddens)
+            
+ACO(5, n_inputs, n_outputs, n_hiddens, pheromones)
