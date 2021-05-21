@@ -8,13 +8,13 @@ Created on Fri May  7 10:24:38 2021
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.utils.prune as prune
 from torch.utils.data import DataLoader
 import pandas as pd
 import os
 from mdrnn import MDRNN
 import tqdm as tqdm
+import math
 
 
 class Pheromones():
@@ -222,7 +222,7 @@ def load_data():
             training_data = torch.cat((training_data, torch.Tensor(df.values)))
     
     # Print general information
-    print("Number of features: {}, number of training samples: {}, number of \
+    print("\nNumber of features: {}, number of training samples: {}, number of \
 test samples: {}".format(training_data.shape[1], training_data.shape[0], 
                          test_data.shape[0]))
     
@@ -236,6 +236,8 @@ def train(model, training_data, batch_size=16):
     
     train_loader = DataLoader(training_data, batch_size=batch_size, 
                               shuffle=True)
+    
+    print("")  # newline to make sure tqdm works
     
     # Define Loss, Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -276,15 +278,10 @@ def test(model, test_data, batch_size=16):
             loss += model.loss(target, logpi, mus, sigmas)
     model.fitness = loss 
 
-def ACO(aco_iterations, n_in, n_out, n_hidden, pheromones):
+def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones):
     """
     Run the ACO algorithm for aco_iterations iterations.
     """
-    # Data parameters
-    n_inputs = 2
-    n_outputs = 1
-    n_hiddens = 2  # should equal n_inputs
-    
     # Hyper parameters
     n_gaussians = 1  # is this dependent on other factors?
     n_models = 5  # 1 for now, actually 10
@@ -293,16 +290,18 @@ def ACO(aco_iterations, n_in, n_out, n_hidden, pheromones):
     
     # Initialize population
     population = []
-    cur_best = 100000
+    cur_best = math.inf
     training_data, test_data = load_data()
     for iteration in tqdm.tqdm(range(aco_iterations)):
         # Generate paths for the models
 
-        for _ in range(n_models):
+        for n in range(n_models):
+            
+            # Define model and paths
             model = MDRNN(n_inputs, n_outputs, n_hiddens, n_gaussians)
             paths = Paths(n_inputs, n_hiddens, pheromones)
+            
             # Prune the model
-            # Loop layers
             prune_layer(model, paths, n_inputs, n_hiddens)
             
             # Training loop 
@@ -311,13 +310,15 @@ def ACO(aco_iterations, n_in, n_out, n_hidden, pheromones):
             # Update fitness
             test(model, test_data, batch_size)
             
+            # Print information
+            print("Trained model number {} with fitness {}".format(n+1, model.fitness))
+            
             # Add model to population
             population.append((model, paths))
         
         # Update pheromones
         for model, paths in population:
             if model.fitness < cur_best:  # Reward
-                print("Great")
                 torch.save(model.state_dict(), 'model_weights.pth')
                 cur_best = model.fitness
                 pheromones.update(paths, 0)
@@ -325,10 +326,6 @@ def ACO(aco_iterations, n_in, n_out, n_hidden, pheromones):
                 pheromones.update(paths, 1)
             if iteration % deg_freq == 0:  # Decay step
                 pheromones.update(paths, 2)
-    bests = []
-    for model, paths in population:
-        if model.fitness == cur_best:
-            print(model.fitness, model)
 
 n_inputs = 2
 n_outputs = 1

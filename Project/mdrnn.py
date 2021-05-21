@@ -8,45 +8,23 @@ import torch.nn.functional as f
 from torch.distributions.normal import Normal
 
 
-class _MDRNNBase(nn.Module):
+class MDRNN(nn.Module):
+    
     def __init__(self, n_input, n_output, n_hidden, n_gaussian):
         super().__init__()
         self.n_input = n_input
         self.n_output = n_output
         self.n_hidden = n_hidden
         self.n_gaussian = n_gaussian
-
+        
+        self.rnn = nn.LSTM(n_input, n_hidden)  # was: n_input + n_output
         self.gmm_linear = nn.Linear(
             n_hidden, (2 * n_input + 1) * n_gaussian + 2)
-
-    def forward(self, *inputs):
-        pass
-
-
-class MDRNN(_MDRNNBase):
-    """ MDRNN model for multi steps forward """
-    
-    def __init__(self, n_input, n_output, n_hidden, n_gaussian):
-        super().__init__(n_input, n_output, n_hidden, n_gaussian)
-        self.rnn = nn.LSTM(n_input, n_hidden)  # was: n_input + n_output
+        
         self.fitness = -1
         
+        
     def forward(self, inputs):
-        """ MULTI STEPS forward.
-        TODO: Fix this (mainly shapes)
-        
-        :args n_output: (SEQ_LEN, BSIZE, ASIZE) torch tensor
-        :args n_input: (SEQ_LEN, BSIZE, LSIZE) torch tensor
-        :returns: mu_nlat, sig_nlat, pi_nlat, rs, ds, parameters of the GMM
-        prediction for the next latent, gaussian prediction of the reward and
-        logit prediction of terminality.
-            - mu_nlat: (SEQ_LEN, BSIZE, N_GAUSS, LSIZE) torch tensor
-            - sigma_nlat: (SEQ_LEN, BSIZE, N_GAUSS, LSIZE) torch tensor
-            - logpi_nlat: (SEQ_LEN, BSIZE, N_GAUSS) torch tensor
-            - rs: (SEQ_LEN, BSIZE) torch tensor - UNUSED
-            - ds: (SEQ_LEN, BSIZE) torch tensor - UNUSED
-        """
-        
         seq_len, bs = inputs.size(0), inputs.size(1)
         
         outs, _ = self.rnn(inputs)
@@ -67,6 +45,7 @@ class MDRNN(_MDRNNBase):
 
         return mus, sigmas, logpi
     
+    
     def loss(self, y_pred, pi, mu, sigma):
         """
         Negative log likelihood under GMM
@@ -76,7 +55,7 @@ class MDRNN(_MDRNNBase):
 
         """
         y_pred = y_pred.unsqueeze(2)
-        mixture = torch.distributions.normal.Normal(mu, sigma)
+        mixture = Normal(mu, sigma)
         p_log = mixture.log_prob(y_pred)
         log_sum = torch.logsumexp(p_log, dim=3)
         return -log_sum.mean()
