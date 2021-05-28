@@ -15,6 +15,7 @@ import os
 from mdrnn import MDRNN
 import tqdm as tqdm
 import math
+import matplotlib.pyplot as plt
 
 
 class Pheromones():
@@ -55,11 +56,11 @@ class Pheromones():
         pher = self.pheromones[kind]
         paths = paths.paths[kind]
         for i in range(0, len(paths)):
-            for j in range(0, len(paths)):
+            for j in range(0, len(paths[i])):
                 if action == 2:  # degrade
                         pher[i,j] *= 0.9
                         
-                if paths.m1[i,j]:
+                if paths[i,j]:
                     if action == 0:  # reward
                         pher[i,j] = min(pher[i,j] * 1.15, 
                                             self.max_pheromone)
@@ -228,8 +229,6 @@ def train(model, training_data, n_epochs, batch_size=16, lr=0.01):
     train_loader = DataLoader(training_data, batch_size=batch_size, 
                               shuffle=True)
     
-    print("")  # newline to make sure tqdm works
-    
     # Define Loss, Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     
@@ -248,11 +247,7 @@ def train(model, training_data, n_epochs, batch_size=16, lr=0.01):
             loss = model.loss(target, logpi, mus, sigmas)
             loss.backward()
             optimizer.step()
-        
-        if epoch % 10 == 0:
-            print('Epoch: {}/{}.............'.format(epoch, n_epochs), end=' ')
-            print("Loss: {:.4f}".format(loss.item()))
-    
+    return loss
     
 def test(model, test_data, batch_size=16):
     
@@ -275,8 +270,12 @@ def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones,
     """
     Run the ACO algorithm for aco_iterations iterations.
     """
+    # Store data:
+    avg_train_losses = []
+    avg_test_losses = []
+    
     # Hyper parameters
-    n_models = 5
+    n_models = 2
     deg_freq = 5
     batch_size = 16
     n_epochs = 10
@@ -287,7 +286,10 @@ def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones,
     cur_best = math.inf
     for iteration in tqdm.tqdm(range(aco_iterations)):
         # Generate paths for the models
-
+        
+        train_losses = []
+        test_losses = []
+        
         for n in range(n_models):
             
             # Define model and paths
@@ -298,13 +300,16 @@ def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones,
             prune_layer(model, paths, n_inputs, n_hiddens)
          
             # Training loop 
-            train(model, training_data, n_epochs, batch_size, lr)
+            loss = train(model, training_data, n_epochs, batch_size, lr)
+            print("\nTrain loss for model {}: {:.4f}".format(n+1, loss.item()))
             
             # Update fitness
             test(model, test_data, batch_size)
+            print("Test loss for model {}: {}".format(n+1, model.fitness))
             
-            # Print information
-            print("Trained model number {} with fitness {}".format(n+1, model.fitness))
+            # Save losses:
+            train_losses.append(loss.item())
+            test_losses.append(model.fitness)
             
             # Add model to population
             population.append((model, paths))
@@ -319,14 +324,20 @@ def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones,
                 pheromones.update(paths, 1)
             if iteration % deg_freq == 0:  # Decay step
                 pheromones.update(paths, 2)
-        print(pheromones.m1)
+        
+        avg_train_losses.append(np.average(train_losses))
+        avg_test_losses.append(np.average(test_losses))
+    
+    return avg_train_losses, avg_test_losses
 
 n_inputs = 2
 n_outputs = 1
 n_hiddens = 2
-n_gaussians = 5               
+n_gaussians = 5
 n_iterations = 10
     
+train_losses = []
+test_losses = []
 # Apply cross-validation
 for i in range(5):
     # Initialize pheromones storage
@@ -334,8 +345,17 @@ for i in range(5):
     # Load data
     train_data, test_data = load_data(i)
     # Run ACO
-    ACO(n_iterations, n_inputs, n_outputs, n_hiddens, pheromones, train_data, test_data, n_gaussians)
+    avg_train_losses, avg_test_losses = ACO(n_iterations, n_inputs, n_outputs, 
+                                    n_hiddens, pheromones, train_data, 
+                                    test_data, n_gaussians)
+    
+    train_losses.append(avg_train_losses)  # shape (5, n_iter)
+    test_losses.append(avg_test_losses)
+    
 
-model = MDRNN(n_inputs, n_outputs, n_hiddens, n_gaussians)
-train(model, train_data)
-test(model, test_data)
+plt.title("Train loss over time")
+plt.plot(np.average(train_losses, axis=0))
+plt.show()
+plt.title("Test loss over time")
+plt.plot(np.average(test_losses, axis=0))
+plt.show()
