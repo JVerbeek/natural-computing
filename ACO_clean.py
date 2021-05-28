@@ -8,13 +8,13 @@ Created on Fri May  7 10:24:38 2021
 
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.nn.utils.prune as prune
 from torch.utils.data import DataLoader
 import pandas as pd
 import os
 from mdrnn import MDRNN
 import tqdm as tqdm
-import math
 
 
 class Pheromones():
@@ -36,10 +36,9 @@ class Pheromones():
         self.m1 = np.ones((n_inputs * 4, n_inputs))
         self.m2 = np.ones((n_outputs * 4, n_inputs))
         self.m2_red = np.ones((n_outputs * 4, n_outputs))
-        self.pheromones = {"m1":self.m1, "m2": self.m2, "m2_red": self.m2_red}
         self.max_pheromone = max_pheromone
          
-    def update(self, paths, action, kind="m1"):
+    def update(self, paths, action):
         """
         Update pheromones along specific connections.
         
@@ -51,58 +50,63 @@ class Pheromones():
             Specifies to reward (0), penalize (1) or degrade (2) the topology 
             specified by the Paths object
         """
-        
-        pher = self.pheromones[kind]
-        paths = paths.paths[kind]
-        for i in range(0, len(paths)):
-            for j in range(0, len(paths):
-                if action == 2:  # degrade
-                        pher[i,j] *= 0.9
-                        
-                if paths.m1[i,j]:
+        for i in range(1, len(paths.input)):
+            if paths.input[i] == 1:
+                if action == 0:  # reward
+                    self.input[i] = min(self.input[i] * 1.15, 
+                                        self.max_pheromone)
+                elif action == 1:  # penalize
+                    self.input[i] *= 0.85
+                elif action == 2:  # degrade
+                    self.input[i] *= 0.9
+                    
+        for i in range(1, len(paths.m1)):
+            for j in range(1, len(paths.m1[i])):
+                if paths.m1[i][j] == 1:
                     if action == 0:  # reward
-                        pher[i,j] = min(pher[i,j] * 1.15, 
+                        self.m1[i][j] = min(self.m1[i][j] * 1.15, 
                                             self.max_pheromone)
                     elif action == 1:  # penalize
-                        pher[i,j] *= 0.85
-                        
+                        self.m1[i][j] *= 0.85
+                    elif action == 2:  # degrade
+                        self.m1[i][j] *= 0.9
 
 
 class Paths():
-    def __init__(self, n_inputs, n_outputs, pheromones, ants=4):
+    def __init__(self, n_inputs, n_outputs, pheromones, ants=256):
         self.n_inputs = n_inputs
         self.n_outputs = n_outputs
         self.input = np.zeros(n_inputs, dtype=bool)
-        self.paths = {"m1": np.zeros((self.n_inputs * 4, self.n_inputs), dtype=bool),
-                      "m2": np.zeros((self.n_outputs * 4, self.n_outputs), dtype=bool), 
-                      "m2_red": np.zeros((self.n_outputs * 4, self.n_outputs), dtype=bool)}
+        self.m1 = np.zeros((n_inputs * 4, n_inputs), dtype=bool)
+        self.m2 = np.zeros((n_outputs * 4, n_inputs), dtype=bool)
+        self.m2_red = np.zeros((n_outputs * 4, n_outputs), dtype=bool)
         self.ants = ants
         # Create pheromones object
         self.pheromones = pheromones
-    
-    def _flatten_reshape(self, paths, pheromones):
+        
+    def general_ants(self, kind="m1"):
+        """General ant function"""
+        if kind == "m1":
+            paths = np.zeros((self.n_inputs * 4, self.n_inputs), dtype=bool)
+            pheromones = self.pheromones.m1
+        elif kind == "m2":
+            paths = np.zeros((self.n_outputs * 4, self.n_inputs), dtype=bool)
+            pheromones = self.pheromones.m2
+        else:
+            paths = np.zeros((self.n_outputs * 4, self.n_outputs), dtype=bool)
+            pheromones = self.pheromones.m2_red
+        
         flatpath = paths.flatten()
         flat_pheromones = pheromones.flatten()
         flat_pheromones = flat_pheromones / sum(flat_pheromones)
-        print(flat_pheromones)
         chosen_paths = np.random.choice(len(flatpath), self.ants, 
                                         p=flat_pheromones)
         
         for i in chosen_paths:
             flatpath[i] = True
         
-        return flatpath.reshape(paths.shape)
+        return torch.from_numpy(flatpath.reshape(paths.shape))
         
-    
-    def general_ants(self, kind="m1"):
-        """General ant function"""
-        paths = self.paths[kind]
-        pheromones = self.pheromones.m1
-        self.paths[kind] = self._flatten_reshape(paths, pheromones)
-        mask = self.paths[kind]
-        return torch.from_numpy(mask)
-        
-
     def get_m1(self) -> torch.Tensor:
         """Get mask without data reduction (n_in == n_out).
         Returns:
@@ -158,7 +162,7 @@ def prune_cell_m2(layer, paths) -> None:
     for name, content in zip(names, contents):
         if "hh" in name:  # hh layer has 4*n_out, n_out dims
             prune.custom_from_mask(layer, name=name, 
-                                   mask=paths.get_m2(True))
+                                   mask=paths.get_m2(reduce=True))
         else:  # ih layer has 4*n_out, n_in dims
             prune.custom_from_mask(layer, name=name, mask=paths.get_m2())
 
@@ -218,7 +222,7 @@ def load_data():
             training_data = torch.cat((training_data, torch.Tensor(df.values)))
     
     # Print general information
-    print("\nNumber of features: {}, number of training samples: {}, number of \
+    print("Number of features: {}, number of training samples: {}, number of \
 test samples: {}".format(training_data.shape[1], training_data.shape[0], 
                          test_data.shape[0]))
     
@@ -227,13 +231,11 @@ test samples: {}".format(training_data.shape[1], training_data.shape[0],
 
 def train(model, training_data, batch_size=16):
     # Define hyperparameters
-    n_epochs = 10
+    n_epochs = 50
     lr = 0.01
     
     train_loader = DataLoader(training_data, batch_size=batch_size, 
                               shuffle=True)
-    
-    print("")  # newline to make sure tqdm works
     
     # Define Loss, Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -274,40 +276,40 @@ def test(model, test_data, batch_size=16):
             loss += model.loss(target, logpi, mus, sigmas)
     model.fitness = loss 
 
-def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones, 
-        training_data, test_data):
+def ACO(aco_iterations, n_in, n_out, n_hidden, pheromones):
     """
     Run the ACO algorithm for aco_iterations iterations.
     """
+    # Data parameters
+    n_inputs = 2
+    n_outputs = 1
+    n_hiddens = 2  # should equal n_inputs
+    
     # Hyper parameters
-    n_gaussians = 5  # is this dependent on other factors?
-    n_models = 1 # 1 for now, actually 10
+    n_gaussians = 1  # is this dependent on other factors?
+    n_models = 5  # 1 for now, actually 10
     deg_freq = 5
     batch_size = 16
     
     # Initialize population
     population = []
-    cur_best = math.inf
+    cur_best = 100000
+    training_data, test_data = load_data()
     for iteration in tqdm.tqdm(range(aco_iterations)):
         # Generate paths for the models
 
-        for n in range(n_models):
-            
-            # Define model and paths
+        for _ in range(n_models):
             model = MDRNN(n_inputs, n_outputs, n_hiddens, n_gaussians)
             paths = Paths(n_inputs, n_hiddens, pheromones)
-                        
             # Prune the model
+            # Loop layers
             prune_layer(model, paths, n_inputs, n_hiddens)
-         
+            
             # Training loop 
             train(model, training_data, batch_size)
             
             # Update fitness
             test(model, test_data, batch_size)
-            
-            # Print information
-            print("Trained model number {} with fitness {}".format(n+1, model.fitness))
             
             # Add model to population
             population.append((model, paths))
@@ -315,6 +317,7 @@ def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones,
         # Update pheromones
         for model, paths in population:
             if model.fitness < cur_best:  # Reward
+                print("Great")
                 torch.save(model.state_dict(), 'model_weights.pth')
                 cur_best = model.fitness
                 pheromones.update(paths, 0)
@@ -322,16 +325,15 @@ def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones,
                 pheromones.update(paths, 1)
             if iteration % deg_freq == 0:  # Decay step
                 pheromones.update(paths, 2)
-        print(pheromones.m1)
+    bests = []
+    for model, paths in population:
+        if model.fitness == cur_best:
+            print(model.fitness, model)
 
 n_inputs = 2
 n_outputs = 1
-n_hiddens = 2  # should equal n_inputs
-n_gaussians = 10               
+n_hiddens = 2  # should equal n_inputs                
     
 pheromones = Pheromones(n_inputs, n_hiddens)
-train_data, test_data = load_data()
-ACO(10, n_inputs, n_outputs, n_hiddens, pheromones, train_data, test_data)
-model = MDRNN(n_inputs, n_outputs, n_hiddens, n_gaussians)
-train(model, train_data)
-test(model, test_data)
+            
+ACO(10, n_inputs, n_outputs, n_hiddens, pheromones)
