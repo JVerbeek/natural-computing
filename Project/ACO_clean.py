@@ -65,7 +65,6 @@ class Pheromones():
                                             self.max_pheromone)
                     elif action == 1:  # penalize
                         pher[i,j] *= 0.85
-                        
 
 
 class Paths():
@@ -177,7 +176,7 @@ def prune_layer(model, paths, n_inputs, n_outputs):
     prune_cell_m2(model.rnn, paths)
 
     
-def load_data():
+def load_data(index):
     '''
     loads the NGAFID dataset.
     
@@ -208,7 +207,7 @@ def load_data():
         df = df[['E1 FFlow', 'E1 CHT1', 'E1 EGT1']]
         
         # Use flight SR20 for test data, rest for training
-        if flight == 'SR20':
+        if flight == flights[index]:
             test_data = torch.Tensor(df.values)
         else:
             # Concatenate data
@@ -258,7 +257,7 @@ def train(model, training_data, n_epochs, batch_size=16, lr=0.01):
 def test(model, test_data, batch_size=16):
     
     test_loader = DataLoader(test_data, batch_size=batch_size)
-    loss = 0
+    loss = []
     
     for batch in test_loader:
         
@@ -267,8 +266,8 @@ def test(model, test_data, batch_size=16):
         
         with torch.no_grad():
             mus, sigmas, logpi = model(data)
-            loss += model.loss(target, logpi, mus, sigmas)
-    model.fitness = loss 
+            loss.append(model.loss(target, logpi, mus, sigmas))
+    model.fitness = np.average(loss)
 
 
 def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones, 
@@ -328,12 +327,14 @@ n_hiddens = 2
 n_gaussians = 5               
 n_iterations = 10
     
-# Initialize pheromones storage
-pheromones = Pheromones(n_inputs, n_hiddens)
-# Load data
-train_data, test_data = load_data()
-# Run ACO
-ACO(n_iterations, n_inputs, n_outputs, n_hiddens, pheromones, train_data, test_data, n_gaussians)
+# Apply cross-validation
+for i in range(5):
+    # Initialize pheromones storage
+    pheromones = Pheromones(n_inputs, n_hiddens)
+    # Load data
+    train_data, test_data = load_data(i)
+    # Run ACO
+    ACO(n_iterations, n_inputs, n_outputs, n_hiddens, pheromones, train_data, test_data, n_gaussians)
 
 model = MDRNN(n_inputs, n_outputs, n_hiddens, n_gaussians)
 train(model, train_data)
