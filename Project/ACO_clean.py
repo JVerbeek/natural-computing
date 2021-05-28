@@ -55,7 +55,7 @@ class Pheromones():
         pher = self.pheromones[kind]
         paths = paths.paths[kind]
         for i in range(0, len(paths)):
-            for j in range(0, len(paths):
+            for j in range(0, len(paths)):
                 if action == 2:  # degrade
                         pher[i,j] *= 0.9
                         
@@ -84,7 +84,6 @@ class Paths():
         flatpath = paths.flatten()
         flat_pheromones = pheromones.flatten()
         flat_pheromones = flat_pheromones / sum(flat_pheromones)
-        print(flat_pheromones)
         chosen_paths = np.random.choice(len(flatpath), self.ants, 
                                         p=flat_pheromones)
         
@@ -123,7 +122,7 @@ class Paths():
         """
         # If reduction to one output, adapt dimensions
         if reduce:
-            return self.general_ants("m2r")
+            return self.general_ants("m2_red")
         # By default return "regular" mask
         return self.general_ants("m2")
         
@@ -225,10 +224,7 @@ test samples: {}".format(training_data.shape[1], training_data.shape[0],
     return training_data, test_data
 
 
-def train(model, training_data, batch_size=16):
-    # Define hyperparameters
-    n_epochs = 10
-    lr = 0.01
+def train(model, training_data, n_epochs, batch_size=16, lr=0.01):
     
     train_loader = DataLoader(training_data, batch_size=batch_size, 
                               shuffle=True)
@@ -274,16 +270,18 @@ def test(model, test_data, batch_size=16):
             loss += model.loss(target, logpi, mus, sigmas)
     model.fitness = loss 
 
+
 def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones, 
-        training_data, test_data):
+        training_data, test_data, n_gaussians):
     """
     Run the ACO algorithm for aco_iterations iterations.
     """
     # Hyper parameters
-    n_gaussians = 5  # is this dependent on other factors?
-    n_models = 1 # 1 for now, actually 10
+    n_models = 5
     deg_freq = 5
     batch_size = 16
+    n_epochs = 10
+    lr = 0.01
     
     # Initialize population
     population = []
@@ -301,7 +299,7 @@ def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones,
             prune_layer(model, paths, n_inputs, n_hiddens)
          
             # Training loop 
-            train(model, training_data, batch_size)
+            train(model, training_data, n_epochs, batch_size, lr)
             
             # Update fitness
             test(model, test_data, batch_size)
@@ -326,12 +324,17 @@ def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones,
 
 n_inputs = 2
 n_outputs = 1
-n_hiddens = 2  # should equal n_inputs
-n_gaussians = 10               
+n_hiddens = 2
+n_gaussians = 5               
+n_iterations = 10
     
+# Initialize pheromones storage
 pheromones = Pheromones(n_inputs, n_hiddens)
+# Load data
 train_data, test_data = load_data()
-ACO(10, n_inputs, n_outputs, n_hiddens, pheromones, train_data, test_data)
+# Run ACO
+ACO(n_iterations, n_inputs, n_outputs, n_hiddens, pheromones, train_data, test_data, n_gaussians)
+
 model = MDRNN(n_inputs, n_outputs, n_hiddens, n_gaussians)
 train(model, train_data)
 test(model, test_data)
