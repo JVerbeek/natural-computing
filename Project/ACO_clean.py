@@ -15,7 +15,7 @@ import os
 from mdrnn import MDRNN
 import tqdm as tqdm
 import math
-
+import matplotlib.pyplot as plt
 
 class Pheromones():
     """
@@ -55,11 +55,11 @@ class Pheromones():
         pher = self.pheromones[kind]
         paths = paths.paths[kind]
         for i in range(0, len(paths)):
-            for j in range(0, len(paths)):
+            for j in range(0, len(paths[i])):
                 if action == 2:  # degrade
                         pher[i,j] *= 0.9
                         
-                if paths.m1[i,j]:
+                if paths[i,j]:
                     if action == 0:  # reward
                         pher[i,j] = min(pher[i,j] * 1.15, 
                                             self.max_pheromone)
@@ -176,6 +176,19 @@ def prune_layer(model, paths, n_inputs, n_outputs):
     prune_cell_m1(model.rnn, paths)
     prune_cell_m2(model.rnn, paths)
 
+
+def eda_plot(burner, burner_name):
+    headers = ['Conditioner_Inlet_Temp', 'Coal_Feeder_Rate',
+               'Primary_Air_Flow', 'Primary_Air_Split',
+               'Conditioner_Outlet_Temp']
+    
+    for header in headers:
+        plt.plot(burner[header], label=header)
+        plt.plot(burner['Main_Flm_Int'], label="Main_Flm_Int")
+        plt.legend()
+        plt.xlabel("Time points")
+        plt.show()
+
     
 def load_data():
     '''
@@ -189,26 +202,30 @@ def load_data():
     to predict the last feature
     '''
     
-    data_path = 'data'
-    flights = ['C172', 'C182', 'PA28', 'PA44', 'SR20']
+    data_path = 'data/coal'
+    burners = ['burner_0', 'burner_1', 'burner_2', 'burner_3', 'burner_4']
     
     training_data = None
     test_data = None
     
     # For each flight read the csv and concatenate it to data
-    for flight in flights:
+    for burner in burners:
         
         # Read data but skip initial spaces and comments
         df = pd.read_csv(
-            os.path.join(data_path, flight, 'log_110812_095915_KCKN.csv'), 
+            os.path.join(data_path, burner+".csv"), 
             comment='#',
             skipinitialspace=True)
+        print(df.head())
         
         # Used features:
-        df = df[['E1 FFlow', 'E1 CHT1', 'E1 EGT1']]
+        df = df[['Conditioner_Inlet_Temp', 'Coal_Feeder_Rate', 
+                 'Primary_Air_Flow', 'Primary_Air_Split', 
+                 'Conditioner_Outlet_Temp', 'Main_Flm_Int']]
+        eda_plot(df, burner)
         
         # Use flight SR20 for test data, rest for training
-        if flight == 'SR20':
+        if burner == 'burner_0':
             test_data = torch.Tensor(df.values)
         else:
             # Concatenate data
@@ -322,10 +339,10 @@ def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones,
                 pheromones.update(paths, 2)
         print(pheromones.m1)
 
-n_inputs = 2
+n_inputs = 5
 n_outputs = 1
-n_hiddens = 2
-n_gaussians = 5               
+n_hiddens = 5
+n_gaussians = 10              
 n_iterations = 10
     
 # Initialize pheromones storage
