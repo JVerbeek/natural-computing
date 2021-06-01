@@ -16,10 +16,6 @@ from mdrnn import MDRNN
 import tqdm as tqdm
 import math
 import matplotlib.pyplot as plt
-<<<<<<< HEAD
-=======
-
->>>>>>> 5cf6e8838b3bfde90068b61c859f929b7c26f7ec
 
 class Pheromones():
     """
@@ -228,11 +224,7 @@ def load_data(index):
         eda_plot(df, burner)
         
         # Use flight SR20 for test data, rest for training
-<<<<<<< HEAD
         if burner == 'burner_0':
-=======
-        if flight == flights[index]:
->>>>>>> 5cf6e8838b3bfde90068b61c859f929b7c26f7ec
             test_data = torch.Tensor(df.values)
         else:
             # Concatenate data
@@ -356,13 +348,8 @@ def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones,
 
 n_inputs = 5
 n_outputs = 1
-<<<<<<< HEAD
 n_hiddens = 5
 n_gaussians = 10              
-=======
-n_hiddens = 2
-n_gaussians = 5
->>>>>>> 5cf6e8838b3bfde90068b61c859f929b7c26f7ec
 n_iterations = 10
     
 train_losses = []
