@@ -16,10 +16,6 @@ from mdrnn import MDRNN
 import tqdm as tqdm
 import math
 import matplotlib.pyplot as plt
-<<<<<<< HEAD
-=======
-
->>>>>>> 5cf6e8838b3bfde90068b61c859f929b7c26f7ec
 
 class Pheromones():
     """
@@ -40,7 +36,13 @@ class Pheromones():
         self.m1 = np.ones((n_inputs * 4, n_inputs))
         self.m2 = np.ones((n_outputs * 4, n_inputs))
         self.m2_red = np.ones((n_outputs * 4, n_outputs))
-        self.pheromones = {"m1":self.m1, "m2": self.m2, "m2_red": self.m2_red}
+        self.fc = np.ones((((2 * n_inputs + 1) * 10 + 2),
+                                     n_inputs))
+        self.pheromones = {"m1":self.m1, 
+                           "m2": self.m2, 
+                           "m2_red": self.m2_red,
+                           "fc": self.fc
+                           }
         self.max_pheromone = max_pheromone
          
     def update(self, paths, action, kind="m1"):
@@ -73,13 +75,21 @@ class Pheromones():
 
 class Paths():
     def __init__(self, n_inputs, n_outputs, pheromones, ants=4):
+        self.n_gaussians = 10
         self.n_inputs = n_inputs
         self.n_outputs = n_outputs
         self.input = np.zeros(n_inputs, dtype=bool)
-        self.paths = {"m1": np.zeros((self.n_inputs * 4, self.n_inputs), dtype=bool),
-                      "m2": np.zeros((self.n_outputs * 4, self.n_outputs), dtype=bool), 
-                      "m2_red": np.zeros((self.n_outputs * 4, self.n_outputs), dtype=bool)}
+        self.paths = {"m1": np.zeros((self.n_inputs * 4, self.n_inputs),
+                                     dtype=bool),
+                      "m2": np.zeros((self.n_outputs * 4, self.n_outputs),
+                                     dtype=bool), 
+                      "m2_red": np.zeros((self.n_outputs * 4, self.n_outputs),
+                                         dtype=bool),
+                      "fc": np.zeros((((2 * self.n_inputs + 1) * self.n_gaussians + 2),
+                                     self.n_inputs), dtype=bool)
+                      }
         self.ants = ants
+        
         # Create pheromones object
         self.pheromones = pheromones
     
@@ -99,7 +109,7 @@ class Paths():
     def general_ants(self, kind="m1"):
         """General ant function"""
         paths = self.paths[kind]
-        pheromones = self.pheromones.m1
+        pheromones = self.pheromones.pheromones[kind]
         self.paths[kind] = self._flatten_reshape(paths, pheromones)
         mask = self.paths[kind]
         return torch.from_numpy(mask)
@@ -128,6 +138,9 @@ class Paths():
             return self.general_ants("m2_red")
         # By default return "regular" mask
         return self.general_ants("m2")
+    
+    def get_fc(self) -> torch.Tensor:
+        return self.general_ants("fc")
         
     
 def prune_cell_m1(layer, paths) -> None:
@@ -165,7 +178,16 @@ def prune_cell_m2(layer, paths) -> None:
             prune.custom_from_mask(layer, name=name, mask=paths.get_m2())
 
 
-def prune_layer(model, paths, n_inputs, n_outputs):
+def prune_fc(layer, paths) -> None:
+    names = [name for (name, content) in layer.named_parameters() 
+             if "weight" in name]
+    contents = [content for (name, content) in layer.named_parameters() 
+                if "weight" in name]
+    for name, content in zip(names, contents):
+        prune.custom_from_mask(layer, name=name, mask=paths.get_fc())
+
+
+def prune_layers(model, paths, n_inputs, n_outputs):
     """
     Prunes the rnn layer of a model
     
@@ -178,11 +200,12 @@ def prune_layer(model, paths, n_inputs, n_outputs):
     # Prune the cells
     prune_cell_m1(model.rnn, paths)
     prune_cell_m2(model.rnn, paths)
+    prune_fc(model.gmm_linear, paths)
 
 
 def eda_plot(burner, burner_name):
-    headers = ['Conditioner_Inlet_Temp', 'Coal_Feeder_Rate',
-               'Primary_Air_Flow', 'Primary_Air_Split',
+    headers = ['Coal_Feeder_Rate',
+               'Primary_Air_Flow',
                'Conditioner_Outlet_Temp']
     
     for header in headers:
@@ -222,17 +245,14 @@ def load_data(index):
         print(df.head())
         
         # Used features:
-        df = df[['Conditioner_Inlet_Temp', 'Coal_Feeder_Rate', 
-                 'Primary_Air_Flow', 'Primary_Air_Split', 
-                 'Conditioner_Outlet_Temp', 'Main_Flm_Int']]
+        df = df[['Coal_Feeder_Rate', 
+                 'Primary_Air_Flow',
+                 'Conditioner_Outlet_Temp', 
+                 'Main_Flm_Int']]
         eda_plot(df, burner)
         
         # Use flight SR20 for test data, rest for training
-<<<<<<< HEAD
         if burner == 'burner_0':
-=======
-        if flight == flights[index]:
->>>>>>> 5cf6e8838b3bfde90068b61c859f929b7c26f7ec
             test_data = torch.Tensor(df.values)
         else:
             # Concatenate data
@@ -321,7 +341,7 @@ def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones,
             paths = Paths(n_inputs, n_hiddens, pheromones)
                         
             # Prune the model
-            prune_layer(model, paths, n_inputs, n_hiddens)
+            prune_layers(model, paths, n_inputs, n_hiddens)
          
             # Training loop 
             loss = train(model, training_data, n_epochs, batch_size, lr)
@@ -354,15 +374,10 @@ def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones,
     
     return avg_train_losses, avg_test_losses
 
-n_inputs = 5
+n_inputs = 3
 n_outputs = 1
-<<<<<<< HEAD
-n_hiddens = 5
+n_hiddens = n_inputs
 n_gaussians = 10              
-=======
-n_hiddens = 2
-n_gaussians = 5
->>>>>>> 5cf6e8838b3bfde90068b61c859f929b7c26f7ec
 n_iterations = 10
     
 train_losses = []
