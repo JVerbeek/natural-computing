@@ -1,8 +1,6 @@
 # natural-computing
 Repository for the course Natural Computing. 
 
-
-## How to run the project 
 ## Preparations
 First, clone the repository:
 
