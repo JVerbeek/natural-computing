@@ -228,37 +228,24 @@ def load_data(index):
     to predict the last feature
     '''
     
-    data_path = 'data/coal'
-    burners = ['burner_0', 'burner_1', 'burner_2', 'burner_3', 'burner_4']
-    
     training_data = None
     test_data = None
     
-    # For each flight read the csv and concatenate it to data
-    for burner in burners:
+    df = pd.read_csv("data/coal/burner_0.csv")
+    print(df.head())
         
-        # Read data but skip initial spaces and comments
-        df = pd.read_csv(
-            os.path.join(data_path, burner+".csv"), 
-            comment='#',
-            skipinitialspace=True)
-        print(df.head())
-        
-        # Used features:
-        df = df[['Coal_Feeder_Rate', 
-                 'Primary_Air_Flow',
-                 'Conditioner_Outlet_Temp', 
-                 'Main_Flm_Int']]
-        eda_plot(df, burner)
-        
-        # Use flight SR20 for test data, rest for training
-        if burner == 'burner_0':
-            test_data = torch.Tensor(df.values)
-        else:
-            # Concatenate data
-            if training_data is None:
-                training_data = torch.Tensor(df.values)    
-            training_data = torch.cat((training_data, torch.Tensor(df.values)))
+    # Used features:
+    df = df[['Coal_Feeder_Rate', 
+             'Primary_Air_Flow',
+             'Conditioner_Outlet_Temp', 
+             'Main_Flm_Int']]
+    
+    data = torch.Tensor(df.values)
+    
+    split_index = int(len(df) / 7)
+    
+    training_data = data[:(index + 2) * split_index]
+    test_data = data[(index + 2) * split_index:(index + 3) * split_index]
     
     # Print general information
     print("\nNumber of features: {}, number of training samples: {}, number of \
@@ -306,7 +293,7 @@ def test(model, test_data, batch_size=16):
         with torch.no_grad():
             mus, sigmas, logpi = model(data)
             loss.append(model.loss(target, logpi, mus, sigmas))
-    model.fitness = np.average(loss)
+    return np.average(loss)
 
 
 def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones, 
@@ -319,7 +306,7 @@ def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones,
     avg_test_losses = []
     
     # Hyper parameters
-    n_models = 2
+    n_models = 10
     deg_freq = 5
     batch_size = 16
     n_epochs = 10
@@ -337,9 +324,9 @@ def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones,
         for n in range(n_models):
             
             # Define model and paths
-            model = MDRNN(n_inputs, n_outputs, n_hiddens, n_gaussians)
+            model = MDRNN(n_inputs, n_outputs, n_hiddens, n_gaussians).float()
             paths = Paths(n_inputs, n_hiddens, pheromones)
-                        
+            
             # Prune the model
             prune_layers(model, paths, n_inputs, n_hiddens)
          
@@ -348,7 +335,7 @@ def ACO(aco_iterations, n_inputs, n_outputs, n_hiddens, pheromones,
             print("\nTrain loss for model {}: {:.4f}".format(n+1, loss.item()))
             
             # Update fitness
-            test(model, test_data, batch_size)
+            model.fitness = test(model, test_data, batch_size)
             print("Test loss for model {}: {}".format(n+1, model.fitness))
             
             # Save losses:
@@ -396,10 +383,13 @@ for i in range(5):
     train_losses.append(avg_train_losses)  # shape (5, n_iter)
     test_losses.append(avg_test_losses)
     
-
+train_losses = np.average(train_losses, axis=0)
+test_losses = np.average(test_losses, axis=0)
 plt.title("Train loss over time")
-plt.plot(np.average(train_losses, axis=0))
+plt.plot(train_losses)
 plt.show()
 plt.title("Test loss over time")
-plt.plot(np.average(test_losses, axis=0))
+plt.plot(test_losses)
 plt.show()
+
+print(test_losses[-1] - test_losses[0])
