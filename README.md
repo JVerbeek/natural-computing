@@ -45,3 +45,9 @@ Run the project through:
 ```
 python3 ACO_clean.py
 ```
+or open `/natural-computing/Project/ACO-clean.py` in an IDE and run it there.
+Another option is running Jupyter notebook and running the .ipynb.
+
+## Problems?
+Mail j.verbeek@student.ru.nl. 
+
